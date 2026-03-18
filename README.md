@@ -1,70 +1,129 @@
-# Getting Started with Create React App
+# Ajueasy Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Plataforma web que conecta clientes e advogados — busca, marketplace de demandas, correspondentes jurídicos, feed e mais.
 
-## Available Scripts
+## Stack
 
-In the project directory, you can run:
+| Ferramenta | Versão |
+|---|---|
+| Vite | 5.x |
+| React | 18.x |
+| TypeScript | 5.x |
+| Tailwind CSS | 3.x |
+| shadcn/ui (Radix UI) | — |
+| react-router-dom | 6.x |
+| Zustand | 4.x |
+| react-hook-form + zod | — |
+| Recharts | 2.x |
+| Axios | 1.x |
+| date-fns | 3.x |
 
-### `npm start`
+## Rodar localmente
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+### 1. Pré-requisitos
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- Node.js ≥ 18
+- npm ≥ 9
 
-### `npm test`
+### 2. Clonar e instalar
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+git clone <repo-url>
+cd ajueasy-frontend
+npm install
+```
 
-### `npm run build`
+### 3. Configurar variáveis de ambiente
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```bash
+cp .env.example .env
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Edite `.env` e ajuste `VITE_API_URL` para apontar ao seu backend:
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```env
+VITE_API_URL=http://localhost:3333
+VITE_APP_ENV=development
+VITE_APP_URL=http://localhost:5173
+```
 
-### `npm run eject`
+### 4. Iniciar em desenvolvimento
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+```bash
+npm run dev
+```
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+O app estará disponível em [http://localhost:5173](http://localhost:5173).
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+### 5. Build de produção
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```bash
+npm run build
+npm run preview   # para testar o build localmente
+```
 
-## Learn More
+## Estrutura de pastas
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+```
+src/
+├── components/
+│   ├── ui/          # Componentes base (Button, Input, Card, etc.)
+│   ├── layout/      # Navbar, Footer, AppLayout, AuthLayout
+│   └── shared/      # LawyerCard, StarRating, StatusBadge, etc.
+├── pages/
+│   ├── Landing/     # Página inicial
+│   ├── Auth/        # Login, Cadastro, Recuperar senha
+│   ├── Onboarding/  # Wizard de onboarding do advogado
+│   ├── Search/      # Busca de advogados
+│   ├── LawyerProfile/ # Perfil do advogado
+│   ├── Feed/        # Feed de artigos
+│   ├── Marketplace/ # Demandas e propostas
+│   ├── Contracts/   # Contratos
+│   ├── Review/      # Avaliações verificadas
+│   ├── Correspondents/ # Módulo de correspondentes
+│   ├── Dashboard/   # Painel do usuário
+│   ├── Office/      # Painel do escritório + BI
+│   ├── Admin/       # Painel administrativo (KYC, denúncias)
+│   └── Institutional/ # FAQ, Termos, Privacidade, Segurança
+├── services/
+│   └── api/         # Axios client + endpoints + mock-data
+├── store/           # Zustand (auth, ui)
+├── types/           # Tipos TypeScript globais
+├── lib/             # Utilitários (cn, formatDate, detectContactInfo…)
+└── hooks/           # Hooks customizados
+```
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+## Autenticação (demo)
 
-### Code Splitting
+No modo demo (sem backend), qualquer e-mail com senha `123456` faz login.
+O usuário logado é mapeado para o advogado mock `Dr. Carlos Mendes`.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Para simular login como **cliente**, ajuste `mockUser` em `LoginPage.tsx`.
 
-### Analyzing the Bundle Size
+## Regras de negócio implementadas no front
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+| Regra | Implementação |
+|---|---|
+| Advogado não verificado ≠ visível na busca | `LawyerCard` + filtro em `SearchPage` |
+| Advogado não verificado não pode enviar proposta | Verificação em `MarketplacePage` e `DemandDetailPage` |
+| Avaliação apenas após contrato concluído | `ReviewPage` verifica `contract.status === 'completed'` |
+| Bloqueio de contato direto antes do aceite | `detectContactInfo` + `ContactBlockWarning` em propostas e demandas |
+| Badge "Avaliação verificada" | Apenas quando `review.isVerified === true` (vinculado a contrato) |
+| Status "Em análise" no perfil | `Onboarding` step 4 + banner no `LawyerProfile` |
 
-### Making a Progressive Web App
+## Deploy
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+O app é um SPA estático — pode ser hospedado em:
+- **Vercel**: `vercel --prod`
+- **Netlify**: arraste a pasta `dist/`
+- **AWS S3 + CloudFront**: configure redirect de `/*` para `index.html`
+- **Nginx**: configure `try_files $uri /index.html;`
 
-### Advanced Configuration
+## Variáveis de ambiente
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+| Variável | Descrição | Obrigatória |
+|---|---|---|
+| `VITE_API_URL` | URL base do backend REST | Sim |
+| `VITE_APP_ENV` | `development` / `staging` / `production` | Não |
+| `VITE_STRIPE_PUBLIC_KEY` | Chave pública Stripe (pagamentos) | Não |
+| `VITE_APP_URL` | URL do próprio frontend (para links em e-mails) | Não |
