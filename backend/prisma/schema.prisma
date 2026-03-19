@@ -276,6 +276,8 @@ model Contract {
   lawyer       User           @relation("LawyerContracts", fields: [lawyerUserId], references: [id])
   price        Float
   status       ContractStatus @default(AWAITING_PAYMENT)
+  numeroProcesso  String?   // CNJ process number linked by the lawyer
+  tribunalIndex   String?   // DataJud index resolved from numeroProcesso
   signedAt     DateTime?
   completedAt  DateTime?
   createdAt    DateTime       @default(now())

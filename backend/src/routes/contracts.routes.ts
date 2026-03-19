@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth.middleware'
 import { validateBody } from '../middleware/validate.middleware'
 import { _releasePayment } from './payments.routes'
+import { parseCnj, resolveTribunalIndex, buscarProcesso } from '../lib/datajud'
 
 const router = Router()
 
@@ -32,6 +33,8 @@ function serializeContract(c: any) {
       : undefined,
     price: c.price,
     status: c.status.toLowerCase(),
+    numeroProcesso: c.numeroProcesso ?? null,
+    tribunalIndex: c.tribunalIndex ?? null,
     signedAt: c.signedAt,
     completedAt: c.completedAt,
     createdAt: c.createdAt,
@@ -143,6 +146,92 @@ router.patch('/:id/dispute', authenticate, validateBody(disputeSchema), async (r
       type: 'OTHER',
       description: req.body.reason,
     },
+  })
+
+  return res.json(serializeContract(updated))
+})
+
+// ─── PATCH /contracts/:id/processo ────────────────────────────────────────────
+// Lawyer links a CNJ process number to the contract.
+// Automatically creates / updates a ProcessoMonitorado entry for the client.
+
+const processoSchema = z.object({
+  numeroProcesso: z.string().min(15, 'Informe o número completo do processo'),
+})
+
+router.patch('/:id/processo', authenticate, validateBody(processoSchema), async (req: Request, res: Response) => {
+  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } })
+  if (!contract) return res.status(404).json({ error: 'Contrato não encontrado' })
+  if (contract.lawyerUserId !== req.user!.id) {
+    return res.status(403).json({ error: 'Apenas o advogado do contrato pode vincular um processo' })
+  }
+  if (!['ACTIVE', 'AWAITING_PAYMENT'].includes(contract.status)) {
+    return res.status(409).json({ error: 'Processo só pode ser vinculado em contratos ativos' })
+  }
+
+  const { numeroProcesso } = req.body as z.infer<typeof processoSchema>
+
+  const parts = parseCnj(numeroProcesso)
+  if (!parts) return res.status(400).json({ error: 'Número de processo inválido. Use o formato CNJ.' })
+
+  const tribunalIndex = resolveTribunalIndex(parts)
+  if (!tribunalIndex) {
+    return res.status(400).json({
+      error: `Tribunal não identificado para o segmento ${parts.segment} / código ${parts.tribunal}.`,
+    })
+  }
+
+  // Verify process exists on DataJud
+  const found = await buscarProcesso(parts.formatted, tribunalIndex).catch((err: Error) => {
+    return res.status(400).json({ error: err.message }) as unknown as null
+  })
+  if (!found) return res.status(404).json({ error: 'Processo não encontrado no DataJud. Verifique o número.' })
+  if (!('processo' in found)) return // already responded
+
+  // Save to contract
+  const updated = await prisma.contract.update({
+    where: { id: contract.id },
+    data: { numeroProcesso: parts.formatted, tribunalIndex },
+    include: contractInclude,
+  })
+
+  // Auto-create ProcessoMonitorado for the client so it appears on their tracking page
+  await prisma.processoMonitorado.upsert({
+    where: {
+      userId_numeroProcesso: {
+        userId: contract.clientId,
+        numeroProcesso: parts.formatted,
+      },
+    },
+    create: {
+      userId: contract.clientId,
+      numeroProcesso: parts.formatted,
+      tribunalIndex,
+      alias: `Contrato #${contract.id.slice(-6)}`,
+      lastCheckedAt: new Date(),
+    },
+    update: {
+      lastCheckedAt: new Date(),
+    },
+  }).catch(() => {}) // non-blocking — client can always add manually
+
+  return res.json(serializeContract(updated))
+})
+
+// ─── DELETE /contracts/:id/processo ───────────────────────────────────────────
+// Lawyer unlinks the process from the contract.
+
+router.delete('/:id/processo', authenticate, async (req: Request, res: Response) => {
+  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } })
+  if (!contract) return res.status(404).json({ error: 'Contrato não encontrado' })
+  if (contract.lawyerUserId !== req.user!.id) {
+    return res.status(403).json({ error: 'Apenas o advogado do contrato pode desvincular o processo' })
+  }
+
+  const updated = await prisma.contract.update({
+    where: { id: contract.id },
+    data: { numeroProcesso: null, tribunalIndex: null },
+    include: contractInclude,
   })
 
   return res.json(serializeContract(updated))

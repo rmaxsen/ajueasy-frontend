@@ -13,4 +13,12 @@ export const contractsApi = {
 
   dispute: (id: string, reason: string) =>
     api.patch<Contract>(`/contracts/${id}/dispute`, { reason }).then((r) => r.data),
+
+  /** Lawyer: link a CNJ process number to the contract */
+  linkProcesso: (id: string, numeroProcesso: string) =>
+    api.patch<Contract>(`/contracts/${id}/processo`, { numeroProcesso }).then((r) => r.data),
+
+  /** Lawyer: unlink the process from the contract */
+  unlinkProcesso: (id: string) =>
+    api.delete<Contract>(`/contracts/${id}/processo`).then((r) => r.data),
 }

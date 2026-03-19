@@ -17,6 +17,7 @@ const demandStatusMap: Record<DemandStatus, { label: string; variant: any }> = {
 }
 
 const contractStatusMap: Record<ContractStatus, { label: string; variant: any }> = {
+  awaiting_payment: { label: 'Aguard. pagamento', variant: 'warning' },
   active: { label: 'Ativo', variant: 'info' },
   completed: { label: 'Concluído', variant: 'success' },
   disputed: { label: 'Em disputa', variant: 'destructive' },

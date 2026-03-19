@@ -68,7 +68,7 @@ export interface Proposal {
 
 // ─── Contrato ─────────────────────────────────────────────────────────────────
 
-export type ContractStatus = 'active' | 'completed' | 'disputed' | 'cancelled'
+export type ContractStatus = 'active' | 'awaiting_payment' | 'completed' | 'disputed' | 'cancelled'
 
 export interface Contract {
   id: string
@@ -82,6 +82,8 @@ export interface Contract {
   lawyer?: Lawyer
   price: number
   status: ContractStatus
+  numeroProcesso?: string | null
+  tribunalIndex?: string | null
   signedAt?: string
   completedAt?: string
   createdAt: string
