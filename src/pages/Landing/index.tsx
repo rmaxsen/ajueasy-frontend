@@ -1,43 +1,21 @@
 import { Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { Search, Shield, Star, Scale, ArrowRight, CheckCircle, Users, FileText, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { LawyerCard } from '@/components/shared/LawyerCard'
-import { mockLawyers, mockPlans } from '@/services/api/mock-data'
+import { lawyersApi } from '@/services/api/lawyers'
+import { Lawyer } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 
 const features = [
-  {
-    icon: Search,
-    title: 'Busca inteligente',
-    desc: 'Encontre advogados por especialidade, localização e avaliações verificadas.',
-  },
-  {
-    icon: Shield,
-    title: 'Advogados verificados',
-    desc: 'Todos os advogados passam por verificação de OAB e documentos antes de atuar.',
-  },
-  {
-    icon: Star,
-    title: 'Avaliações autênticas',
-    desc: 'Avaliações apenas de clientes com contratos concluídos na plataforma.',
-  },
-  {
-    icon: FileText,
-    title: 'Contratos seguros',
-    desc: 'Propostas, aceites e contratos documentados e armazenados com segurança.',
-  },
-  {
-    icon: Zap,
-    title: 'Marketplace de demandas',
-    desc: 'Publique sua necessidade e receba propostas de advogados qualificados.',
-  },
-  {
-    icon: Users,
-    title: 'Correspondentes jurídicos',
-    desc: 'Advogados encontram correspondentes em qualquer estado com agilidade.',
-  },
+  { icon: Search, title: 'Busca inteligente', desc: 'Encontre advogados por especialidade, localização e avaliações verificadas.' },
+  { icon: Shield, title: 'Advogados verificados', desc: 'Todos os advogados passam por verificação de OAB e documentos antes de atuar.' },
+  { icon: Star, title: 'Avaliações autênticas', desc: 'Avaliações apenas de clientes com contratos concluídos na plataforma.' },
+  { icon: FileText, title: 'Contratos seguros', desc: 'Propostas, aceites e contratos documentados e armazenados com segurança.' },
+  { icon: Zap, title: 'Marketplace de demandas', desc: 'Publique sua necessidade e receba propostas de advogados qualificados.' },
+  { icon: Users, title: 'Correspondentes jurídicos', desc: 'Advogados encontram correspondentes em qualquer estado com agilidade.' },
 ]
 
 const steps = [
@@ -47,8 +25,23 @@ const steps = [
   { n: '4', title: 'Avalie o serviço', desc: 'Após a conclusão, deixe uma avaliação verificada.' },
 ]
 
+const staticPlans = [
+  { id: 'free', name: 'Grátis', slug: 'free', priceMonthly: 0, features: ['Perfil público', 'Até 3 propostas/mês', 'Feed jurídico', 'Suporte por e-mail'] },
+  { id: 'pro', name: 'PRO', slug: 'pro', priceMonthly: 99, features: ['Tudo do Grátis', 'Propostas ilimitadas', 'Destaque na busca', 'Analytics do escritório', 'Suporte prioritário'] },
+  { id: 'enterprise', name: 'Escritório', slug: 'enterprise', priceMonthly: 249, features: ['Tudo do PRO', 'Múltiplos advogados', 'Gestão de equipe', 'Relatórios avançados', 'API de integração'] },
+]
+
 export default function LandingPage() {
-  const verifiedLawyers = mockLawyers.filter((l) => l.status === 'verified').slice(0, 3)
+  const [featuredLawyers, setFeaturedLawyers] = useState<Lawyer[]>([])
+
+  useEffect(() => {
+    lawyersApi.list({ page: 1, perPage: 3, plan: 'pro' } as any)
+      .then((res) => {
+        const data = Array.isArray(res) ? res : (res as any).data ?? []
+        setFeaturedLawyers(data.slice(0, 3))
+      })
+      .catch(() => setFeaturedLawyers([]))
+  }, [])
 
   return (
     <div>
@@ -82,7 +75,7 @@ export default function LandingPage() {
             </Button>
           </div>
 
-          <div className="mt-16 grid grid-cols-3 md:grid-cols-3 gap-8 max-w-lg mx-auto">
+          <div className="mt-16 grid grid-cols-3 gap-8 max-w-lg mx-auto">
             {[
               { n: '5.000+', l: 'Advogados' },
               { n: '98%', l: 'Satisfação' },
@@ -144,19 +137,19 @@ export default function LandingPage() {
       </section>
 
       {/* Featured Lawyers */}
-      <section className="py-20 container mx-auto px-4">
-        <div className="flex items-center justify-between mb-8">
-          <h2 className="text-3xl font-bold">Advogados em destaque</h2>
-          <Button variant="outline" asChild>
-            <Link to="/buscar">Ver todos</Link>
-          </Button>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {verifiedLawyers.map((l) => (
-            <LawyerCard key={l.id} lawyer={l} />
-          ))}
-        </div>
-      </section>
+      {featuredLawyers.length > 0 && (
+        <section className="py-20 container mx-auto px-4">
+          <div className="flex items-center justify-between mb-8">
+            <h2 className="text-3xl font-bold">Advogados em destaque</h2>
+            <Button variant="outline" asChild>
+              <Link to="/buscar">Ver todos</Link>
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {featuredLawyers.map((l) => <LawyerCard key={l.id} lawyer={l} />)}
+          </div>
+        </section>
+      )}
 
       {/* Pricing */}
       <section className="py-20 bg-muted/30">
@@ -166,7 +159,7 @@ export default function LandingPage() {
             <p className="text-muted-foreground">Comece grátis e expanda quando precisar.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-            {mockPlans.map((plan) => (
+            {staticPlans.map((plan) => (
               <Card key={plan.id} className={plan.slug === 'pro' ? 'border-primary shadow-lg relative' : ''}>
                 {plan.slug === 'pro' && (
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
@@ -193,11 +186,7 @@ export default function LandingPage() {
                       </li>
                     ))}
                   </ul>
-                  <Button
-                    className="w-full"
-                    variant={plan.slug === 'pro' ? 'default' : 'outline'}
-                    asChild
-                  >
+                  <Button className="w-full" variant={plan.slug === 'pro' ? 'default' : 'outline'} asChild>
                     <Link to={`/cadastro?role=lawyer&plan=${plan.slug}`}>
                       {plan.priceMonthly === 0 ? 'Começar grátis' : 'Assinar agora'}
                     </Link>
@@ -222,7 +211,7 @@ export default function LandingPage() {
               <Link to="/cadastro">Criar conta grátis</Link>
             </Button>
             <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10" asChild>
-              <Link to="/como-funciona">Saber mais</Link>
+              <Link to="/buscar">Explorar advogados</Link>
             </Button>
           </div>
         </div>

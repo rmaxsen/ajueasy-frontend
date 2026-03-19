@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, Search, MapPin, Calendar, DollarSign, Loader2, CheckCircle } from 'lucide-react'
+import { Plus, Search, MapPin, Calendar, DollarSign, Loader2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { EmptyState } from '@/components/shared/EmptyState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ContactBlockWarning } from '@/components/shared/ContactBlockWarning'
-import { mockCorrespondentRequests } from '@/services/api/mock-data'
+import { correspondentsApi } from '@/services/api/correspondents'
 import { CorrespondentRequest } from '@/types'
 import { SPECIALTIES, UF_LIST, formatCurrency, formatDate, timeAgo, detectContactInfo } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
@@ -33,17 +33,25 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>
 
 export default function CorrespondentsPage() {
-  const { user, isAuthenticated } = useAuthStore()
-  const [requests, setRequests] = useState<CorrespondentRequest[]>(mockCorrespondentRequests)
+  const { user } = useAuthStore()
+  const [requests, setRequests] = useState<CorrespondentRequest[]>([])
+  const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [filterUf, setFilterUf] = useState('all')
   const [search, setSearch] = useState('')
 
-  const { register, handleSubmit, watch, setValue, reset, formState: { errors, isSubmitting } } = useForm<FormData>({
+  const { register, handleSubmit, watch, setValue, reset, formState: { isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
   const descValue = watch('description') ?? ''
   const hasContact = detectContactInfo(descValue)
+
+  useEffect(() => {
+    correspondentsApi.listRequests()
+      .then((res) => setRequests(Array.isArray(res) ? res : (res as any).data ?? []))
+      .catch(() => setRequests([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   const filtered = requests.filter((r) => {
     if (filterUf !== 'all' && r.uf !== filterUf) return false
@@ -55,25 +63,23 @@ export default function CorrespondentsPage() {
 
   async function onCreate(data: FormData) {
     if (hasContact) return
-    await new Promise((r) => setTimeout(r, 800))
-    const newReq: CorrespondentRequest = {
-      id: `cr${Date.now()}`,
-      requesterId: user?.id ?? '',
-      title: data.title,
-      description: data.description,
-      uf: data.uf,
-      city: data.city,
-      specialty: data.specialty,
-      hearing: data.hearing || undefined,
-      deadline: data.deadline,
-      budget: Number(data.budget),
-      status: 'open',
-      proposalsCount: 0,
-      createdAt: new Date().toISOString(),
+    try {
+      const created = await correspondentsApi.createRequest({
+        title: data.title,
+        description: data.description,
+        uf: data.uf,
+        city: data.city,
+        specialty: data.specialty,
+        hearing: data.hearing || undefined,
+        deadline: data.deadline,
+        budget: Number(data.budget),
+      } as any)
+      setRequests((prev) => [created, ...prev])
+      reset()
+      setCreateOpen(false)
+    } catch {
+      // ignore
     }
-    setRequests((prev) => [newReq, ...prev])
-    reset()
-    setCreateOpen(false)
   }
 
   return (
@@ -81,17 +87,12 @@ export default function CorrespondentsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold">Correspondentes Jurídicos</h1>
-          <p className="text-muted-foreground text-sm">
-            Encontre ou ofereça correspondência em todo o Brasil
-          </p>
+          <p className="text-muted-foreground text-sm">Encontre ou ofereça correspondência em todo o Brasil</p>
         </div>
         {isLawyerVerified && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Novo pedido
-              </Button>
+              <Button className="gap-2"><Plus className="h-4 w-4" /> Novo pedido</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
               <DialogHeader>
@@ -112,9 +113,7 @@ export default function CorrespondentsPage() {
                     <Label>UF</Label>
                     <Select onValueChange={(v) => setValue('uf', v)}>
                       <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                      <SelectContent>
-                        {UF_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                      </SelectContent>
+                      <SelectContent>{UF_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
@@ -126,9 +125,7 @@ export default function CorrespondentsPage() {
                   <Label>Especialidade</Label>
                   <Select onValueChange={(v) => setValue('specialty', v)}>
                     <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
-                    <SelectContent>
-                      {SPECIALTIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                    </SelectContent>
+                    <SelectContent>{SPECIALTIES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -158,21 +155,13 @@ export default function CorrespondentsPage() {
         )}
       </div>
 
-      {/* Filters */}
       <div className="flex gap-3 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-10"
-            placeholder="Buscar pedidos..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <Input className="pl-10" placeholder="Buscar pedidos..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={filterUf} onValueChange={setFilterUf}>
-          <SelectTrigger className="w-28">
-            <SelectValue placeholder="UF" />
-          </SelectTrigger>
+          <SelectTrigger className="w-28"><SelectValue placeholder="UF" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             {UF_LIST.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
@@ -180,12 +169,12 @@ export default function CorrespondentsPage() {
         </Select>
       </div>
 
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={MapPin}
-          title="Nenhum pedido encontrado"
-          description="Nenhum pedido de correspondente disponível com esses filtros."
-        />
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon={MapPin} title="Nenhum pedido encontrado" description="Nenhum pedido de correspondente disponível com esses filtros." />
       ) : (
         <div className="space-y-4">
           {filtered.map((r) => (
@@ -199,9 +188,7 @@ export default function CorrespondentsPage() {
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{r.description}</p>
                     <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3 w-3" /> {r.city}/{r.uf}
-                      </span>
+                      <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {r.city}/{r.uf}</span>
                       <Badge variant="outline" className="text-xs">{r.specialty}</Badge>
                       {r.hearing && (
                         <span className="flex items-center gap-1">
@@ -209,10 +196,7 @@ export default function CorrespondentsPage() {
                           Audiência: {formatDate(r.hearing, 'dd/MM/yyyy HH:mm')}
                         </span>
                       )}
-                      <span className="flex items-center gap-1">
-                        <DollarSign className="h-3 w-3" />
-                        {formatCurrency(r.budget)}
-                      </span>
+                      <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />{formatCurrency(r.budget)}</span>
                       <span>📝 {r.proposalsCount} proposta(s)</span>
                       <span>🕐 {timeAgo(r.createdAt)}</span>
                     </div>
@@ -222,7 +206,9 @@ export default function CorrespondentsPage() {
                       <Link to={`/correspondentes/${r.id}`}>Ver detalhes</Link>
                     </Button>
                     {isLawyerVerified && r.status === 'open' && (
-                      <Button size="sm">Enviar proposta</Button>
+                      <Button size="sm" asChild>
+                        <Link to={`/correspondentes/${r.id}#proposta`}>Enviar proposta</Link>
+                      </Button>
                     )}
                   </div>
                 </div>

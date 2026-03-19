@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react'
-import { Search, Filter, X } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, Filter, X, Loader2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LawyerCard } from '@/components/shared/LawyerCard'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Badge } from '@/components/ui/badge'
-import { mockLawyers } from '@/services/api/mock-data'
+import { lawyersApi } from '@/services/api/lawyers'
+import { Lawyer } from '@/types'
 import { SPECIALTIES, UF_LIST } from '@/lib/utils'
 
 export default function SearchPage() {
@@ -16,18 +17,32 @@ export default function SearchPage() {
   const [uf, setUf] = useState('all')
   const [minRating, setMinRating] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
+  const [lawyers, setLawyers] = useState<Lawyer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const results = useMemo(() => {
-    return mockLawyers.filter((l) => {
-      if (!l.isVisible || l.status !== 'verified') return false
-      if (search && !l.name.toLowerCase().includes(search.toLowerCase()) &&
-          !l.specialties.some((s) => s.toLowerCase().includes(search.toLowerCase()))) return false
-      if (specialty !== 'all' && !l.specialties.includes(specialty)) return false
-      if (uf !== 'all' && l.uf !== uf) return false
-      if (minRating !== 'all' && l.rating < Number(minRating)) return false
-      return true
-    })
+  const fetchLawyers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params: Record<string, string> = {}
+      if (search) params.search = search
+      if (specialty !== 'all') params.specialty = specialty
+      if (uf !== 'all') params.uf = uf
+      if (minRating !== 'all') params.minRating = minRating
+      const res = await lawyersApi.list(params as any)
+      setLawyers(Array.isArray(res) ? res : (res as any).data ?? [])
+    } catch {
+      setError('Erro ao carregar advogados. Verifique sua conexão.')
+    } finally {
+      setLoading(false)
+    }
   }, [search, specialty, uf, minRating])
+
+  useEffect(() => {
+    const timer = setTimeout(fetchLawyers, 400)
+    return () => clearTimeout(timer)
+  }, [fetchLawyers])
 
   const activeFilters = [
     specialty !== 'all' && specialty,
@@ -44,7 +59,6 @@ export default function SearchPage() {
         </p>
       </div>
 
-      {/* Search bar */}
       <div className="flex gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -55,11 +69,7 @@ export default function SearchPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <Button
-          variant="outline"
-          onClick={() => setShowFilters(!showFilters)}
-          className="gap-2"
-        >
+        <Button variant="outline" onClick={() => setShowFilters(!showFilters)} className="gap-2">
           <Filter className="h-4 w-4" />
           Filtros
           {activeFilters.length > 0 && (
@@ -68,33 +78,29 @@ export default function SearchPage() {
         </Button>
       </div>
 
-      {/* Active filter badges */}
       {activeFilters.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {activeFilters.map((f) => (
             <Badge key={f} variant="secondary" className="gap-1">
               {f}
-              <button
-                onClick={() => {
-                  if (SPECIALTIES.includes(f)) setSpecialty('all')
-                  else if (UF_LIST.includes(f)) setUf('all')
-                  else setMinRating('all')
-                }}
-              >
+              <button onClick={() => {
+                if (SPECIALTIES.includes(f)) setSpecialty('all')
+                else if (UF_LIST.includes(f)) setUf('all')
+                else setMinRating('all')
+              }}>
                 <X className="h-3 w-3" />
               </button>
             </Badge>
           ))}
           <button
             className="text-xs text-primary hover:underline"
-            onClick={() => { setSpecialty('all'); setUf('all'); setMinRating('all') }}
+            onClick={() => { setSearch(''); setSpecialty('all'); setUf('all'); setMinRating('all') }}
           >
             Limpar todos
           </button>
         </div>
       )}
 
-      {/* Filters panel */}
       {showFilters && (
         <div className="border rounded-lg p-5 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4 bg-background">
           <div className="space-y-1.5">
@@ -132,26 +138,37 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* Results */}
-      <p className="text-sm text-muted-foreground mb-4">
-        {results.length} advogado{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
-      </p>
-
-      {results.length === 0 ? (
-        <EmptyState
-          icon={Search}
-          title="Nenhum advogado encontrado"
-          description="Tente ajustar os filtros ou buscar por outro termo."
-          action={
-            <Button variant="outline" onClick={() => { setSearch(''); setSpecialty('all'); setUf('all'); setMinRating('all') }}>
-              Limpar filtros
-            </Button>
-          }
-        />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {results.map((l) => <LawyerCard key={l.id} lawyer={l} />)}
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
+      ) : error ? (
+        <div className="text-center py-20">
+          <p className="text-destructive mb-4">{error}</p>
+          <Button variant="outline" onClick={fetchLawyers}>Tentar novamente</Button>
+        </div>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground mb-4">
+            {lawyers.length} advogado{lawyers.length !== 1 ? 's' : ''} encontrado{lawyers.length !== 1 ? 's' : ''}
+          </p>
+          {lawyers.length === 0 ? (
+            <EmptyState
+              icon={Search}
+              title="Nenhum advogado encontrado"
+              description="Tente ajustar os filtros ou buscar por outro termo."
+              action={
+                <Button variant="outline" onClick={() => { setSearch(''); setSpecialty('all'); setUf('all'); setMinRating('all') }}>
+                  Limpar filtros
+                </Button>
+              }
+            />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {lawyers.map((l) => <LawyerCard key={l.id} lawyer={l} />)}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

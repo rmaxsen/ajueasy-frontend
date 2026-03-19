@@ -4,6 +4,7 @@ import cors from 'cors'
 import helmet from 'helmet'
 import path from 'path'
 import rateLimit from 'express-rate-limit'
+import { prisma } from './lib/prisma'
 
 import authRoutes from './routes/auth.routes'
 import usersRoutes from './routes/users.routes'
@@ -28,11 +29,19 @@ const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173')
   .split(',')
   .map((o) => o.trim())
 
+// Allow Vercel preview deployments automatically (*.vercel.app)
+const isOriginAllowed = (origin: string) => {
+  if (allowedOrigins.includes(origin)) return true
+  // Support Vercel preview URLs: https://<project>-<hash>-<team>.vercel.app
+  if (/^https:\/\/[a-z0-9-]+-[a-z0-9]+-[a-z0-9]+\.vercel\.app$/.test(origin)) return true
+  return false
+}
+
 app.use(
   cors({
     origin: (origin, cb) => {
       // Allow no-origin (mobile/Postman) or listed origins
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin || isOriginAllowed(origin)) {
         cb(null, true)
       } else {
         cb(new Error(`CORS: Origin ${origin} not allowed`))
@@ -76,12 +85,23 @@ app.use('/uploads', express.static(path.resolve(uploadDir)))
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    env: process.env.NODE_ENV ?? 'development',
-    timestamp: new Date().toISOString(),
-  })
+app.get('/health', async (_req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+    res.json({
+      status: 'ok',
+      db: 'connected',
+      env: process.env.NODE_ENV ?? 'development',
+      timestamp: new Date().toISOString(),
+    })
+  } catch {
+    res.status(503).json({
+      status: 'degraded',
+      db: 'disconnected',
+      env: process.env.NODE_ENV ?? 'development',
+      timestamp: new Date().toISOString(),
+    })
+  }
 })
 
 // ─── Routes ───────────────────────────────────────────────────────────────────

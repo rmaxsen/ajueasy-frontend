@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Plus, FileText, Search, Filter, AlertCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { Plus, FileText, Search, Filter, AlertCircle, Loader2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { EmptyState } from '@/components/shared/EmptyState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ContactBlockWarning } from '@/components/shared/ContactBlockWarning'
-import { mockDemands } from '@/services/api/mock-data'
+import { demandsApi } from '@/services/api/demands'
 import { Demand } from '@/types'
 import { SPECIALTIES, UF_LIST, formatDate, formatCurrency, detectContactInfo, timeAgo } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
@@ -31,8 +31,8 @@ type CreateForm = z.infer<typeof createSchema>
 
 export default function MarketplacePage() {
   const { user, isAuthenticated } = useAuthStore()
-  const navigate = useNavigate()
-  const [demands, setDemands] = useState<Demand[]>(mockDemands)
+  const [demands, setDemands] = useState<Demand[]>([])
+  const [loading, setLoading] = useState(true)
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -49,6 +49,13 @@ export default function MarketplacePage() {
   const descriptionValue = watch('description') ?? ''
   const hasContactInfo = detectContactInfo(descriptionValue)
 
+  useEffect(() => {
+    demandsApi.list()
+      .then((res) => setDemands(Array.isArray(res) ? res : (res as any).data ?? []))
+      .catch(() => setDemands([]))
+      .finally(() => setLoading(false))
+  }, [])
+
   const filtered = demands.filter((d) => {
     if (filterStatus !== 'all' && d.status !== filterStatus) return false
     if (search && !d.title.toLowerCase().includes(search.toLowerCase())) return false
@@ -57,28 +64,23 @@ export default function MarketplacePage() {
 
   async function onCreate(data: CreateForm) {
     if (hasContactInfo) return
-    await new Promise((r) => setTimeout(r, 800))
-    const newDemand: Demand = {
-      id: `d${Date.now()}`,
-      clientId: user?.id ?? '',
-      title: data.title,
-      description: data.description,
-      specialty: data.specialty,
-      uf: data.uf,
-      budget: data.budget ? Number(data.budget) : undefined,
-      status: 'open',
-      proposalsCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+    try {
+      const created = await demandsApi.create({
+        title: data.title,
+        description: data.description,
+        specialty: data.specialty,
+        uf: data.uf,
+        budget: data.budget ? Number(data.budget) : undefined,
+      })
+      setDemands((prev) => [created, ...prev])
+      reset()
+      setCreateOpen(false)
+    } catch (err: any) {
+      // error handled by form
     }
-    setDemands((prev) => [newDemand, ...prev])
-    reset()
-    setCreateOpen(false)
   }
 
-  // Advogado não verificado não pode enviar propostas
-  const isLawyerUnverified =
-    user?.role === 'lawyer' && (user as any).status !== 'verified'
+  const isLawyerUnverified = user?.role === 'lawyer' && (user as any).status !== 'verified'
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -111,14 +113,8 @@ export default function MarketplacePage() {
                 </div>
                 <div className="space-y-1.5">
                   <Label>Descrição detalhada</Label>
-                  <Textarea
-                    placeholder="Descreva sua situação com detalhes relevantes..."
-                    rows={5}
-                    {...register('description')}
-                  />
-                  {errors.description && (
-                    <p className="text-destructive text-xs">{errors.description.message}</p>
-                  )}
+                  <Textarea placeholder="Descreva sua situação com detalhes relevantes..." rows={5} {...register('description')} />
+                  {errors.description && <p className="text-destructive text-xs">{errors.description.message}</p>}
                   <ContactBlockWarning visible={hasContactInfo} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -146,14 +142,10 @@ export default function MarketplacePage() {
                   <Label>Orçamento estimado (R$) — opcional</Label>
                   <Input type="number" placeholder="500" {...register('budget')} />
                 </div>
-                <div className="p-3 bg-blue-50 rounded-md text-xs text-blue-800">
-                  Após publicar, advogados verificados poderão enviar propostas. Você escolhe com quem fechar.
-                </div>
                 <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>
-                    Cancelar
-                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
                   <Button type="submit" disabled={isSubmitting || hasContactInfo}>
+                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Publicar
                   </Button>
                 </div>
@@ -175,21 +167,13 @@ export default function MarketplacePage() {
         </div>
       )}
 
-      {/* Filters */}
       <div className="flex gap-3 mb-6">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-10"
-            placeholder="Buscar demandas..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <Input className="pl-10" placeholder="Buscar demandas..." value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={filterStatus} onValueChange={setFilterStatus}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
+          <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
             <SelectItem value="open">Aberta</SelectItem>
@@ -199,8 +183,11 @@ export default function MarketplacePage() {
         </Select>
       </div>
 
-      {/* List */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState
           icon={FileText}
           title="Nenhuma demanda encontrada"
@@ -214,10 +201,7 @@ export default function MarketplacePage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <Link
-                        to={`/marketplace/${d.id}`}
-                        className="font-semibold hover:text-primary transition-colors"
-                      >
+                      <Link to={`/marketplace/${d.id}`} className="font-semibold hover:text-primary transition-colors">
                         {d.title}
                       </Link>
                       <StatusBadge type="demand" status={d.status} />

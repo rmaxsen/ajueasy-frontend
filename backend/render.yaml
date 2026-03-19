@@ -3,28 +3,54 @@ services:
     name: ajueasy-api
     runtime: node
     plan: free
+    # Installs deps, compiles TS, runs pending Prisma migrations on every deploy
     buildCommand: npm install && npm run build && npm run db:migrate
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
+
       - key: PORT
         value: 10000
+
+      # Injected automatically from the Render PostgreSQL add-on below
       - key: DATABASE_URL
         fromDatabase:
           name: ajueasy-db
           property: connectionString
+
+      # Auto-generated secure secrets — rotate via Render dashboard if needed
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+
+      # JWT token lifetimes (can override defaults)
+      - key: JWT_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+
+      # ── CORS ──────────────────────────────────────────────────────────────────
+      # Add your Vercel preview/prod URLs here (comma-separated, no trailing slash)
+      # e.g.: https://ajueasy.vercel.app,https://ajueasy.com.br
       - key: CORS_ORIGINS
-        value: https://ajueasy.com.br,https://www.ajueasy.com.br
+        value: https://ajueasy.vercel.app,https://ajueasy.com.br,https://www.ajueasy.com.br
+        # If using a custom Vercel domain update this value in the Render dashboard
+
+      # ── App URL (used in password-reset e-mails) ──────────────────────────────
+      - key: APP_URL
+        value: https://ajueasy.vercel.app
+
+      # ── File uploads ──────────────────────────────────────────────────────────
       - key: UPLOAD_DIR
         value: ./uploads
       - key: MAX_FILE_SIZE_MB
         value: 10
+
+      # ── E-mail / SMTP ─────────────────────────────────────────────────────────
+      # Set these in the Render dashboard → Environment → Secret Files
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -34,7 +60,13 @@ services:
       - key: SMTP_PASS
         sync: false
       - key: SMTP_FROM
-        value: noreply@ajueasy.com.br
+        value: "Ajueasy <noreply@ajueasy.com.br>"
+
+      # ── Admin seed account (used only by `npm run db:seed`) ───────────────────
+      - key: ADMIN_EMAIL
+        value: admin@ajueasy.com.br
+      - key: ADMIN_PASSWORD
+        sync: false   # set in dashboard: strong password
 
 databases:
   - name: ajueasy-db

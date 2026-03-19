@@ -8,7 +8,6 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar
 } from 'recharts'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { mockContracts, mockDemands } from '@/services/api/mock-data'
 import { formatCurrency } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 
@@ -43,7 +42,7 @@ export default function DashboardPage() {
         { icon: TrendingUp, label: 'Receita (mês)', value: formatCurrency(3600), trend: '+15%' },
       ]
     : [
-        { icon: FileText, label: 'Demandas publicadas', value: String(mockDemands.length), trend: '1 nova' },
+        { icon: FileText, label: 'Demandas publicadas', value: '—', trend: '' },
         { icon: Users, label: 'Propostas recebidas', value: '8', trend: '3 novas' },
         { icon: Scale, label: 'Contratos ativos', value: '1', trend: '' },
         { icon: CheckCircle, label: 'Casos resolvidos', value: '3', trend: '100% satisfação' },

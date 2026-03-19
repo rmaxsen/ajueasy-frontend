@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
-import { mockLawyers } from '@/services/api/mock-data'
+import { authApi } from '@/services/api/auth'
 
 const schema = z.object({
   email: z.string().email('E-mail inválido'),
@@ -29,18 +29,14 @@ export default function LoginPage() {
   } = useForm<FormData>({ resolver: zodResolver(schema) })
 
   async function onSubmit(data: FormData) {
-    await new Promise((r) => setTimeout(r, 800))
-
-    // Mock auth: qualquer email com senha "123456" loga
-    if (data.password !== '123456' && data.password.length < 6) {
-      setError('password', { message: 'Credenciais inválidas' })
-      return
+    try {
+      const res = await authApi.login(data)
+      login(res.user, res.token, res.refreshToken)
+      navigate('/dashboard')
+    } catch (err: any) {
+      const msg = err?.response?.data?.error ?? 'Credenciais inválidas'
+      setError('password', { message: msg })
     }
-
-    // Simula login com advogado mock
-    const mockUser = mockLawyers[0]
-    login({ ...mockUser, email: data.email }, 'mock-token-123')
-    navigate('/dashboard')
   }
 
   return (
@@ -99,10 +95,6 @@ export default function LoginPage() {
           Entrar
         </Button>
       </form>
-
-      <div className="mt-6 p-3 bg-muted rounded-md text-xs text-muted-foreground">
-        <strong>Demo:</strong> Use qualquer e-mail com senha <code>123456</code>
-      </div>
     </div>
   )
 }

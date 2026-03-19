@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -14,8 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Separator } from '@/components/ui/separator'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ContactBlockWarning } from '@/components/shared/ContactBlockWarning'
-import { mockDemands, mockLawyers } from '@/services/api/mock-data'
-import { Proposal } from '@/types'
+import { demandsApi } from '@/services/api/demands'
+import { Demand, Proposal } from '@/types'
 import { formatCurrency, timeAgo, detectContactInfo, getInitials } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 
@@ -29,16 +29,36 @@ type ProposalForm = z.infer<typeof proposalSchema>
 export default function DemandDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuthStore()
-  const demand = mockDemands.find((d) => d.id === id)
+  const [demand, setDemand] = useState<Demand | null>(null)
   const [proposals, setProposals] = useState<Proposal[]>([])
-  const [accepted, setAccepted] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [sent, setSent] = useState(false)
+  const [acceptingId, setAcceptingId] = useState<string | null>(null)
 
   const { register, handleSubmit, watch, formState: { errors, isSubmitting }, reset } = useForm<ProposalForm>({
     resolver: zodResolver(proposalSchema),
   })
   const descValue = watch('description') ?? ''
   const hasContact = detectContactInfo(descValue)
+
+  useEffect(() => {
+    if (!id) return
+    Promise.all([demandsApi.get(id), demandsApi.getProposals(id)])
+      .then(([demandData, proposalsData]) => {
+        setDemand(demandData)
+        setProposals(Array.isArray(proposalsData) ? proposalsData : [])
+      })
+      .catch(() => setDemand(null))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (!demand) {
     return (
@@ -55,21 +75,34 @@ export default function DemandDetailPage() {
 
   async function onSendProposal(data: ProposalForm) {
     if (hasContact || !demand) return
-    await new Promise((r) => setTimeout(r, 800))
-    const newProposal: Proposal = {
-      id: `pr${Date.now()}`,
-      demandId: demand.id,
-      lawyerId: user?.id ?? '',
-      lawyer: mockLawyers[0],
-      description: data.description,
-      price: Number(data.price),
-      estimatedDays: Number(data.estimatedDays),
-      status: 'pending',
-      createdAt: new Date().toISOString(),
+    try {
+      const created = await demandsApi.sendProposal(demand.id, {
+        description: data.description,
+        price: Number(data.price),
+        estimatedDays: Number(data.estimatedDays),
+      })
+      setProposals((prev) => [...prev, created])
+      setSent(true)
+      reset()
+    } catch (err: any) {
+      // show error from backend
     }
-    setProposals((prev) => [...prev, newProposal])
-    setSent(true)
-    reset()
+  }
+
+  async function acceptProposal(proposalId: string) {
+    if (!demand) return
+    setAcceptingId(proposalId)
+    try {
+      await demandsApi.acceptProposal(demand.id, proposalId)
+      setProposals((prev) =>
+        prev.map((p) => ({ ...p, status: p.id === proposalId ? 'accepted' : 'rejected' }))
+      )
+      setDemand((prev) => prev ? { ...prev, status: 'in_progress' } : prev)
+    } catch {
+      // ignore
+    } finally {
+      setAcceptingId(null)
+    }
   }
 
   return (
@@ -79,7 +112,6 @@ export default function DemandDetailPage() {
       </Button>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Demand details */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardContent className="p-6">
@@ -97,19 +129,14 @@ export default function DemandDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Proposals (visible to client) */}
           {isClient && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">
-                  Propostas recebidas ({proposals.length})
-                </CardTitle>
+                <CardTitle className="text-base">Propostas recebidas ({proposals.length})</CardTitle>
               </CardHeader>
               <CardContent>
                 {proposals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">
-                    Aguardando propostas de advogados...
-                  </p>
+                  <p className="text-sm text-muted-foreground py-4 text-center">Aguardando propostas de advogados...</p>
                 ) : (
                   <div className="space-y-4">
                     {proposals.map((p) => (
@@ -117,15 +144,11 @@ export default function DemandDetailPage() {
                         <div className="flex items-center gap-3 mb-2">
                           <Avatar className="h-8 w-8">
                             <AvatarImage src={p.lawyer?.avatar} />
-                            <AvatarFallback>
-                              {p.lawyer ? getInitials(p.lawyer.name) : '?'}
-                            </AvatarFallback>
+                            <AvatarFallback>{p.lawyer ? getInitials(p.lawyer.name) : '?'}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
                             <p className="font-medium text-sm">{p.lawyer?.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              OAB/{p.lawyer?.oabState} {p.lawyer?.oabNumber}
-                            </p>
+                            <p className="text-xs text-muted-foreground">OAB/{p.lawyer?.oabState} {p.lawyer?.oabNumber}</p>
                           </div>
                           <StatusBadge type="proposal" status={p.status} />
                         </div>
@@ -135,17 +158,20 @@ export default function DemandDetailPage() {
                             <span className="font-semibold">{formatCurrency(p.price)}</span>
                             <span className="text-muted-foreground"> · {p.estimatedDays} dias</span>
                           </div>
-                          {accepted === null && demand.status === 'open' && (
+                          {demand.status === 'open' && p.status === 'pending' && (
                             <Button
                               size="sm"
-                              onClick={() => setAccepted(p.id)}
+                              onClick={() => acceptProposal(p.id)}
+                              disabled={acceptingId === p.id}
                               className="gap-1"
                             >
-                              <CheckCircle className="h-4 w-4" />
+                              {acceptingId === p.id
+                                ? <Loader2 className="h-4 w-4 animate-spin" />
+                                : <CheckCircle className="h-4 w-4" />}
                               Aceitar
                             </Button>
                           )}
-                          {accepted === p.id && (
+                          {p.status === 'accepted' && (
                             <Badge variant="success" className="gap-1">
                               <CheckCircle className="h-3 w-3" />
                               Aceita
@@ -160,7 +186,6 @@ export default function DemandDetailPage() {
             </Card>
           )}
 
-          {/* Send proposal (visible to verified lawyers) */}
           {isVerifiedLawyer && demand.status === 'open' && !sent && (
             <Card id="proposta">
               <CardHeader>
@@ -173,14 +198,8 @@ export default function DemandDetailPage() {
                 <form onSubmit={handleSubmit(onSendProposal)} className="space-y-4">
                   <div className="space-y-1.5">
                     <Label>Descrição da proposta</Label>
-                    <Textarea
-                      placeholder="Explique sua abordagem e como pode ajudar o cliente..."
-                      rows={5}
-                      {...register('description')}
-                    />
-                    {errors.description && (
-                      <p className="text-destructive text-xs">{errors.description.message}</p>
-                    )}
+                    <Textarea placeholder="Explique sua abordagem e como pode ajudar o cliente..." rows={5} {...register('description')} />
+                    {errors.description && <p className="text-destructive text-xs">{errors.description.message}</p>}
                     <ContactBlockWarning visible={hasContact} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -215,7 +234,6 @@ export default function DemandDetailPage() {
           )}
         </div>
 
-        {/* Sidebar info */}
         <div className="space-y-4">
           <Card>
             <CardContent className="p-5 space-y-3 text-sm">
@@ -240,7 +258,7 @@ export default function DemandDetailPage() {
               <Separator />
               <div>
                 <p className="text-muted-foreground">Propostas</p>
-                <p className="font-medium">{demand.proposalsCount + proposals.length}</p>
+                <p className="font-medium">{demand.proposalsCount}</p>
               </div>
             </CardContent>
           </Card>

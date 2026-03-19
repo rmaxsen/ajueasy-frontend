@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
-import { MapPin, Star, Briefcase, ExternalLink, CheckCircle, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { MapPin, Star, Briefcase, ExternalLink, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -9,16 +10,47 @@ import { Separator } from '@/components/ui/separator'
 import { StarRating } from '@/components/shared/StarRating'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { EmptyState } from '@/components/shared/EmptyState'
-import { mockLawyers, mockReviews, mockPosts } from '@/services/api/mock-data'
+import { lawyersApi } from '@/services/api/lawyers'
+import { feedApi } from '@/services/api/feed'
+import { Lawyer, Review, Post } from '@/types'
 import { getInitials, formatDate, timeAgo } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 
 export default function LawyerProfilePage() {
   const { id } = useParams<{ id: string }>()
   const { user, isAuthenticated } = useAuthStore()
-  const lawyer = mockLawyers.find((l) => l.id === id)
+  const [lawyer, setLawyer] = useState<Lawyer | null>(null)
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
-  if (!lawyer) {
+  useEffect(() => {
+    if (!id) return
+    Promise.all([
+      lawyersApi.get(id),
+      lawyersApi.getReviews(id),
+      feedApi.list({ page: 1 }),
+    ])
+      .then(([lawyerData, reviewsData, feedData]) => {
+        setLawyer(lawyerData)
+        setReviews(Array.isArray(reviewsData) ? reviewsData : (reviewsData as any).data ?? [])
+        const allPosts = Array.isArray(feedData) ? feedData : (feedData as any).data ?? []
+        setPosts(allPosts.filter((p: Post) => p.authorId === id))
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false))
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (error || !lawyer) {
     return (
       <div className="container mx-auto px-4 py-20 text-center">
         <h2 className="text-2xl font-bold mb-2">Advogado não encontrado</h2>
@@ -27,14 +59,10 @@ export default function LawyerProfilePage() {
     )
   }
 
-  const reviews = mockReviews.filter((r) => r.lawyerId === lawyer.id)
-  const posts = mockPosts.filter((p) => p.authorId === lawyer.id)
-
   const isOwner = user?.id === lawyer.id
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
-      {/* Banner de status para advogado não verificado */}
       {lawyer.status !== 'verified' && (
         <div className="mb-6 flex items-center gap-3 rounded-lg bg-amber-50 border border-amber-200 p-4">
           <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
@@ -77,7 +105,7 @@ export default function LawyerProfilePage() {
               </div>
               {isAuthenticated && !isOwner && lawyer.isVisible && (
                 <Button className="w-full" asChild>
-                  <Link to={`/marketplace/nova?lawyerId=${lawyer.id}`}>Contratar / Enviar demanda</Link>
+                  <Link to={`/marketplace?lawyerId=${lawyer.id}`}>Contratar / Enviar demanda</Link>
                 </Button>
               )}
               {isOwner && (
@@ -88,7 +116,6 @@ export default function LawyerProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Specialties */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Especialidades</CardTitle>

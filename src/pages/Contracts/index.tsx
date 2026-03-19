@@ -1,29 +1,42 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, CheckCircle, AlertTriangle, Eye } from 'lucide-react'
+import { FileText, CheckCircle, AlertTriangle, Eye, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { mockContracts } from '@/services/api/mock-data'
+import { contractsApi } from '@/services/api/contracts'
 import { Contract } from '@/types'
 import { formatDate, formatCurrency, getInitials } from '@/lib/utils'
 import { useAuthStore } from '@/store/auth'
 
 export default function ContractsPage() {
   const { user } = useAuthStore()
-  const [contracts, setContracts] = useState<Contract[]>(mockContracts)
+  const [contracts, setContracts] = useState<Contract[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    contractsApi.list()
+      .then((res) => setContracts(Array.isArray(res) ? res : (res as any).data ?? []))
+      .catch(() => setContracts([]))
+      .finally(() => setLoading(false))
+  }, [])
 
   const active = contracts.filter((c) => c.status === 'active')
   const completed = contracts.filter((c) => c.status === 'completed')
   const other = contracts.filter((c) => !['active', 'completed'].includes(c.status))
 
-  function handleComplete(id: string) {
-    setContracts((prev) =>
-      prev.map((c) => c.id === id ? { ...c, status: 'completed', completedAt: new Date().toISOString() } : c)
-    )
+  async function handleComplete(id: string) {
+    try {
+      await contractsApi.complete(id)
+      setContracts((prev) =>
+        prev.map((c) => c.id === id ? { ...c, status: 'completed', completedAt: new Date().toISOString() } : c)
+      )
+    } catch {
+      // ignore
+    }
   }
 
   function ContractCard({ contract }: { contract: Contract }) {
@@ -78,6 +91,14 @@ export default function ContractsPage() {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
@@ -94,29 +115,17 @@ export default function ContractsPage() {
 
         <TabsContent value="active">
           {active.length === 0 ? (
-            <EmptyState
-              icon={FileText}
-              title="Nenhum contrato ativo"
-              description="Seus contratos em andamento aparecerão aqui."
-            />
+            <EmptyState icon={FileText} title="Nenhum contrato ativo" description="Seus contratos em andamento aparecerão aqui." />
           ) : (
-            <div className="space-y-4">
-              {active.map((c) => <ContractCard key={c.id} contract={c} />)}
-            </div>
+            <div className="space-y-4">{active.map((c) => <ContractCard key={c.id} contract={c} />)}</div>
           )}
         </TabsContent>
 
         <TabsContent value="completed">
           {completed.length === 0 ? (
-            <EmptyState
-              icon={CheckCircle}
-              title="Nenhum contrato concluído"
-              description="Contratos finalizados aparecerão aqui."
-            />
+            <EmptyState icon={CheckCircle} title="Nenhum contrato concluído" description="Contratos finalizados aparecerão aqui." />
           ) : (
-            <div className="space-y-4">
-              {completed.map((c) => <ContractCard key={c.id} contract={c} />)}
-            </div>
+            <div className="space-y-4">{completed.map((c) => <ContractCard key={c.id} contract={c} />)}</div>
           )}
         </TabsContent>
 
@@ -124,9 +133,7 @@ export default function ContractsPage() {
           {other.length === 0 ? (
             <EmptyState icon={AlertTriangle} title="Nenhum contrato" />
           ) : (
-            <div className="space-y-4">
-              {other.map((c) => <ContractCard key={c.id} contract={c} />)}
-            </div>
+            <div className="space-y-4">{other.map((c) => <ContractCard key={c.id} contract={c} />)}</div>
           )}
         </TabsContent>
       </Tabs>

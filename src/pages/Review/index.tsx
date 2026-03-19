@@ -1,5 +1,5 @@
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { Loader2, CheckCircle, ArrowLeft, ShieldCheck } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -11,7 +11,9 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { StarRating } from '@/components/shared/StarRating'
-import { mockContracts, mockLawyers } from '@/services/api/mock-data'
+import { contractsApi } from '@/services/api/contracts'
+import { reviewsApi } from '@/services/api/reviews'
+import { Contract } from '@/types'
 import { getInitials, formatDate, formatCurrency } from '@/lib/utils'
 
 const schema = z.object({
@@ -21,15 +23,36 @@ type FormData = z.infer<typeof schema>
 
 export default function ReviewPage() {
   const { contractId } = useParams<{ contractId: string }>()
-  const navigate = useNavigate()
-  const contract = mockContracts.find((c) => c.id === contractId)
+  const [contract, setContract] = useState<Contract | null>(null)
+  const [canReview, setCanReview] = useState<boolean | null>(null)
+  const [loading, setLoading] = useState(true)
   const [rating, setRating] = useState(0)
   const [submitted, setSubmitted] = useState(false)
   const [ratingError, setRatingError] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<FormData>({
     resolver: zodResolver(schema),
   })
+
+  useEffect(() => {
+    if (!contractId) return
+    Promise.all([contractsApi.get(contractId), reviewsApi.canReview(contractId)])
+      .then(([contractData, canReviewData]) => {
+        setContract(contractData)
+        setCanReview(canReviewData.canReview)
+      })
+      .catch(() => setContract(null))
+      .finally(() => setLoading(false))
+  }, [contractId])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (!contract) {
     return (
@@ -40,26 +63,33 @@ export default function ReviewPage() {
     )
   }
 
-  if (contract.status !== 'completed') {
+  if (contract.status !== 'completed' || canReview === false) {
     return (
       <div className="container mx-auto px-4 py-20 text-center max-w-md">
         <ShieldCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
         <h2 className="text-xl font-bold mb-2">Avaliação não disponível</h2>
         <p className="text-muted-foreground mb-4">
-          Avaliações só podem ser feitas após a conclusão do contrato.
-          Apenas contratos com status "Concluído" permitem avaliação verificada.
+          {canReview === false
+            ? 'Você já avaliou este contrato ou não tem permissão para avaliá-lo.'
+            : 'Avaliações só podem ser feitas após a conclusão do contrato.'}
         </p>
         <Button asChild variant="outline"><Link to="/contratos">Ver contratos</Link></Button>
       </div>
     )
   }
 
-  const lawyer = mockLawyers.find((l) => l.id === contract.lawyerId)
+  const lawyer = contract.lawyer as any
 
   async function onSubmit(data: FormData) {
     if (rating === 0) { setRatingError(true); return }
-    await new Promise((r) => setTimeout(r, 800))
-    setSubmitted(true)
+    if (!contractId) return
+    setSubmitError(null)
+    try {
+      await reviewsApi.create(contractId, { rating, comment: data.comment })
+      setSubmitted(true)
+    } catch (err: any) {
+      setSubmitError(err?.response?.data?.error ?? 'Erro ao enviar avaliação.')
+    }
   }
 
   if (submitted) {
@@ -78,7 +108,9 @@ export default function ReviewPage() {
         </Badge>
         <div className="flex gap-3 justify-center">
           <Button asChild variant="outline"><Link to="/contratos">Ver contratos</Link></Button>
-          <Button asChild><Link to={`/advogado/${lawyer?.id}`}>Ver perfil do advogado</Link></Button>
+          {lawyer?.id && (
+            <Button asChild><Link to={`/advogado/${lawyer.id}`}>Ver perfil do advogado</Link></Button>
+          )}
         </div>
       </div>
     )
@@ -98,17 +130,16 @@ export default function ReviewPage() {
           </p>
         </CardHeader>
         <CardContent>
-          {/* Lawyer info */}
           <div className="flex items-center gap-3 mb-6 p-4 bg-muted/50 rounded-lg">
             <Avatar className="h-12 w-12">
               <AvatarImage src={lawyer?.avatar} />
               <AvatarFallback>{lawyer ? getInitials(lawyer.name) : '?'}</AvatarFallback>
             </Avatar>
             <div>
-              <p className="font-medium">{lawyer?.name}</p>
-              <p className="text-sm text-muted-foreground">
-                OAB/{lawyer?.oabState} {lawyer?.oabNumber}
-              </p>
+              <p className="font-medium">{lawyer?.name ?? 'Advogado'}</p>
+              {lawyer?.oabState && (
+                <p className="text-sm text-muted-foreground">OAB/{lawyer.oabState} {lawyer.oabNumber}</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Contrato: {formatCurrency(contract.price)} · {formatDate(contract.createdAt)}
               </p>
@@ -127,13 +158,11 @@ export default function ReviewPage() {
 
             <div className="space-y-1.5">
               <Label>Comentário</Label>
-              <Textarea
-                placeholder="Descreva sua experiência com este advogado..."
-                rows={5}
-                {...register('comment')}
-              />
+              <Textarea placeholder="Descreva sua experiência com este advogado..." rows={5} {...register('comment')} />
               {errors.comment && <p className="text-destructive text-xs">{errors.comment.message}</p>}
             </div>
+
+            {submitError && <p className="text-destructive text-sm">{submitError}</p>}
 
             <div className="p-3 bg-blue-50 rounded-md text-xs text-blue-800 flex items-start gap-2">
               <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5" />

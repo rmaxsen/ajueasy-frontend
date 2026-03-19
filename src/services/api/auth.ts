@@ -10,12 +10,13 @@ export interface RegisterPayload {
   name: string
   email: string
   password: string
-  role: 'client' | 'lawyer'
+  role: 'CLIENT' | 'LAWYER'
 }
 
 export interface AuthResponse {
   user: User
   token: string
+  refreshToken: string
 }
 
 export const authApi = {

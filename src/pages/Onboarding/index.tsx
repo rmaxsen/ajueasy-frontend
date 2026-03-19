@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuthStore } from '@/store/auth'
+import { lawyersApi } from '@/services/api/lawyers'
 import { SPECIALTIES, UF_LIST } from '@/lib/utils'
 
 const steps = [
@@ -60,7 +61,26 @@ export default function OnboardingPage() {
   }
 
   async function handleFinish() {
-    await new Promise((r) => setTimeout(r, 1000))
+    if (!user?.id) { navigate('/dashboard'); return }
+    try {
+      // Save profile data from step 1 + 2
+      const s1 = form1.getValues()
+      const s2 = form2.getValues()
+      await lawyersApi.updateProfile(user.id, {
+        bio: s1.bio,
+        city: s1.city,
+        uf: selectedUF,
+        specialties: selectedSpecialties,
+        oabNumber: s2.oabNumber,
+        oabState: s2.oabState,
+      } as any)
+
+      // Upload KYC documents
+      if (docs.oab) await lawyersApi.uploadKycDocument(user.id, 'oab_card', docs.oab)
+      if (docs.id) await lawyersApi.uploadKycDocument(user.id, 'id_document', docs.id)
+    } catch {
+      // Non-blocking: proceed even if API fails in staging
+    }
     navigate('/dashboard')
   }
 

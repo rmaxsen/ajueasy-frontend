@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/store/auth'
-import { mockLawyers } from '@/services/api/mock-data'
+import { authApi } from '@/services/api/auth'
 
 const schema = z.object({
   name: z.string().min(3, 'Mínimo 3 caracteres'),
@@ -27,6 +27,7 @@ export default function RegisterPage() {
   const { login } = useAuthStore()
   const navigate = useNavigate()
   const [showPass, setShowPass] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
 
   const {
     register,
@@ -42,18 +43,18 @@ export default function RegisterPage() {
   const selectedRole = watch('role')
 
   async function onSubmit(data: FormData) {
-    await new Promise((r) => setTimeout(r, 1000))
-
-    if (data.role === 'lawyer') {
-      const mockUser = { ...mockLawyers[0], name: data.name, email: data.email }
-      login(mockUser, 'mock-token-lawyer')
-      navigate('/onboarding')
-    } else {
-      login(
-        { id: 'new-client', name: data.name, email: data.email, role: 'client', createdAt: new Date().toISOString() },
-        'mock-token-client'
-      )
-      navigate('/dashboard')
+    setApiError(null)
+    try {
+      const res = await authApi.register({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        role: data.role === 'lawyer' ? 'LAWYER' : 'CLIENT',
+      })
+      login(res.user, res.token, res.refreshToken)
+      navigate(data.role === 'lawyer' ? '/onboarding' : '/dashboard')
+    } catch (err: any) {
+      setApiError(err?.response?.data?.error ?? 'Erro ao criar conta. Tente novamente.')
     }
   }
 
@@ -92,6 +93,10 @@ export default function RegisterPage() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <input type="hidden" {...register('role')} />
+
+        {apiError && (
+          <div className="p-3 bg-destructive/10 text-destructive text-sm rounded-md">{apiError}</div>
+        )}
 
         <div className="space-y-1.5">
           <Label htmlFor="name">Nome completo</Label>
