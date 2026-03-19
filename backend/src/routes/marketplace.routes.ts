@@ -10,6 +10,7 @@ import { validateBody, validateQuery } from '../middleware/validate.middleware'
 import { contactGuard } from '../middleware/contactGuard.middleware'
 import { paginate, paginatedResponse } from '../lib/paginate'
 import { mailer } from '../lib/mailer'
+import { createInvoice } from '../lib/iugu'
 
 const router = Router()
 
@@ -284,8 +285,44 @@ router.patch('/:id/proposals/:proposalId/accept', authenticate, async (req: Requ
     return contract
   })
 
+  // Create escrow payment invoice
+  const client = await prisma.user.findUnique({ where: { id: demand.clientId } })
+  let invoiceUrl: string | null = null
+  try {
+    const amountCents = Math.round(proposal.price * 100)
+    const dueDate = new Date()
+    dueDate.setDate(dueDate.getDate() + 3)
+    const dueDateStr = dueDate.toISOString().split('T')[0]
+
+    const { invoiceId, invoiceUrl: url } = await createInvoice({
+      clientEmail: client!.email,
+      clientName: client!.name,
+      amountCents,
+      description: `Ajueasy — pagamento de serviço jurídico (contrato #${contract.id.slice(-8)})`,
+      dueDate: dueDateStr,
+      contractId: contract.id,
+    })
+
+    await prisma.payment.create({
+      data: {
+        contractId: contract.id,
+        iuguInvoiceId: invoiceId,
+        iuguInvoiceUrl: url,
+        amount: proposal.price,
+      },
+    })
+    invoiceUrl = url
+  } catch (err) {
+    console.error('[iugu invoice creation error]', err)
+    // Non-blocking: client can retry via POST /payments/:contractId
+  }
+
   await mailer.contractCreated(proposal.lawyer.user.email, proposal.price)
-  return res.json({ contractId: contract.id, message: 'Proposta aceita e contrato gerado' })
+  return res.json({
+    contractId: contract.id,
+    invoiceUrl,
+    message: 'Proposta aceita e contrato gerado — aguardando pagamento',
+  })
 })
 
 // ─── PATCH /demands/:id/proposals/:proposalId/reject ─────────────────────────

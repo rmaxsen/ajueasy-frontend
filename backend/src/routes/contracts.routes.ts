@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../lib/prisma'
 import { authenticate } from '../middleware/auth.middleware'
 import { validateBody } from '../middleware/validate.middleware'
+import { _releasePayment } from './payments.routes'
 
 const router = Router()
 
@@ -88,7 +89,10 @@ router.get('/:id', authenticate, async (req: Request, res: Response) => {
 // ─── PATCH /contracts/:id/complete ────────────────────────────────────────────
 
 router.patch('/:id/complete', authenticate, async (req: Request, res: Response) => {
-  const contract = await prisma.contract.findUnique({ where: { id: req.params.id } })
+  const contract = await prisma.contract.findUnique({
+    where: { id: req.params.id },
+    include: { payment: true },
+  })
   if (!contract) return res.status(404).json({ error: 'Contrato não encontrado' })
   if (contract.clientId !== req.user!.id) return res.status(403).json({ error: 'Sem permissão' })
   if (contract.status !== 'ACTIVE') return res.status(409).json({ error: 'Contrato não está ativo' })
@@ -97,6 +101,12 @@ router.patch('/:id/complete', authenticate, async (req: Request, res: Response) 
     where: { id: contract.id },
     data: { status: 'COMPLETED', completedAt: new Date() },
     include: contractInclude,
+  })
+
+  // Release escrowed funds to the lawyer
+  await _releasePayment(contract).catch((err) => {
+    console.error('[payment release error]', err)
+    // Non-blocking: contract is completed regardless; admin can release manually
   })
 
   return res.json(serializeContract(updated))

@@ -15,6 +15,8 @@ import contractsRoutes from './routes/contracts.routes'
 import reviewsRoutes from './routes/reviews.routes'
 import correspondentsRoutes from './routes/correspondents.routes'
 import adminRoutes from './routes/admin.routes'
+import paymentsRoutes from './routes/payments.routes'
+import { isSandboxMode } from './lib/iugu'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -92,6 +94,7 @@ app.get('/health', async (_req, res) => {
       status: 'ok',
       db: 'connected',
       env: process.env.NODE_ENV ?? 'development',
+      payments: isSandboxMode ? 'sandbox' : 'iugu_production',
       timestamp: new Date().toISOString(),
     })
   } catch {
@@ -117,6 +120,7 @@ app.use('/contracts', contractsRoutes)
 app.use('/contracts', reviewsRoutes)
 app.use('/correspondents', correspondentsRoutes)
 app.use('/admin', adminRoutes)
+app.use('/payments', paymentsRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

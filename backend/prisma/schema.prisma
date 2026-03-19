@@ -60,10 +60,19 @@ enum ProposalStatus {
 }
 
 enum ContractStatus {
+  AWAITING_PAYMENT
   ACTIVE
   COMPLETED
   DISPUTED
   CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  RELEASED
+  REFUNDED
+  DISPUTED
 }
 
 enum CorrespondentStatus {
@@ -131,7 +140,8 @@ model LawyerProfile {
   specialties    String[]
   uf             String
   city           String
-  phone          String?
+  phone              String?
+  iuguSubAccountId   String?       // Set when lawyer links their Iugu account
   plan           Plan         @default(FREE)
   isVisible      Boolean      @default(false)
   rating         Float        @default(0)
@@ -254,27 +264,46 @@ model Proposal {
 }
 
 model Contract {
-  id          String         @id @default(cuid())
-  demandId    String         @unique
-  demand      Demand         @relation(fields: [demandId], references: [id])
-  proposalId  String         @unique
-  proposal    Proposal       @relation(fields: [proposalId], references: [id])
-  clientId    String
-  client      User           @relation("ClientContracts", fields: [clientId], references: [id])
+  id           String         @id @default(cuid())
+  demandId     String         @unique
+  demand       Demand         @relation(fields: [demandId], references: [id])
+  proposalId   String         @unique
+  proposal     Proposal       @relation(fields: [proposalId], references: [id])
+  clientId     String
+  client       User           @relation("ClientContracts", fields: [clientId], references: [id])
   lawyerUserId String
-  lawyer      User           @relation("LawyerContracts", fields: [lawyerUserId], references: [id])
-  price       Float
-  status      ContractStatus @default(ACTIVE)
-  signedAt    DateTime?
-  completedAt DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  lawyer       User           @relation("LawyerContracts", fields: [lawyerUserId], references: [id])
+  price        Float
+  status       ContractStatus @default(AWAITING_PAYMENT)
+  signedAt     DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
-  review Review?
+  review  Review?
+  payment Payment?
 
   @@index([clientId])
   @@index([lawyerUserId])
   @@index([status])
+}
+
+model Payment {
+  id             String        @id @default(cuid())
+  contractId     String        @unique
+  contract       Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  iuguInvoiceId  String?       // Iugu invoice ID (null in sandbox mode)
+  iuguInvoiceUrl String?       // Payment URL shown to client
+  amount         Float
+  status         PaymentStatus @default(PENDING)
+  paidAt         DateTime?
+  releasedAt     DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status])
+  @@index([iuguInvoiceId])
 }
 
 model Review {
