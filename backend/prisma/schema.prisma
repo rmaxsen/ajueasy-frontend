@@ -1,0 +1,383 @@
+// ─── Prisma Schema — Ajueasy ─────────────────────────────────────────────────
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  CLIENT
+  LAWYER
+  OFFICE_ADMIN
+  ADMIN
+}
+
+enum LawyerStatus {
+  PENDING
+  UNDER_REVIEW
+  VERIFIED
+  REJECTED
+  SUSPENDED
+}
+
+enum Plan {
+  FREE
+  PRO
+  OFFICE
+}
+
+enum KycDocType {
+  OAB_CARD
+  ID_DOCUMENT
+  ADDRESS_PROOF
+  OTHER
+}
+
+enum KycStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum DemandStatus {
+  OPEN
+  IN_PROGRESS
+  CLOSED
+  CANCELLED
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ContractStatus {
+  ACTIVE
+  COMPLETED
+  DISPUTED
+  CANCELLED
+}
+
+enum CorrespondentStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ReportType {
+  CONTACT_INFO
+  FRAUD
+  SPAM
+  ABUSIVE_CONTENT
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String
+  avatar     String?
+  role       UserRole @default(CLIENT)
+  isBanned   Boolean  @default(false)
+  banReason  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  lawyerProfile   LawyerProfile?
+  posts           Post[]
+  comments        Comment[]
+  likes           Like[]
+  demands         Demand[]
+  clientContracts Contract[]        @relation("ClientContracts")
+  lawyerContracts Contract[]        @relation("LawyerContracts")
+  reviewsGiven    Review[]          @relation("ReviewerReviews")
+  refreshTokens   RefreshToken[]
+  passwordResets  PasswordReset[]
+  auditLogs       AuditLog[]
+  reportsMade     Report[]          @relation("ReporterReports")
+  reportsReceived Report[]          @relation("ReportedReports")
+
+  @@index([email])
+  @@index([role])
+}
+
+model LawyerProfile {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oabNumber      String
+  oabState       String       // 2-letter UF
+  status         LawyerStatus @default(PENDING)
+  bio            String?
+  specialties    String[]
+  uf             String
+  city           String
+  phone          String?
+  plan           Plan         @default(FREE)
+  isVisible      Boolean      @default(false)
+  rating         Float        @default(0)
+  reviewCount    Int          @default(0)
+  officeId       String?
+
+  kycDocuments            KycDocument[]
+  proposals               Proposal[]
+  correspondentRequests   CorrespondentRequest[]
+  correspondentProposals  CorrespondentProposal[]
+
+  @@index([uf, status])
+  @@index([status])
+  @@index([oabNumber, oabState])
+}
+
+model KycDocument {
+  id              String        @id @default(cuid())
+  lawyerProfileId String
+  lawyerProfile   LawyerProfile @relation(fields: [lawyerProfileId], references: [id], onDelete: Cascade)
+  type            KycDocType
+  fileUrl         String
+  fileName        String
+  mimeType        String
+  sizeBytes       Int
+  status          KycStatus     @default(PENDING)
+  reviewNote      String?
+  uploadedAt      DateTime      @default(now())
+  reviewedAt      DateTime?
+  reviewedBy      String?       // admin userId
+
+  @@index([lawyerProfileId])
+  @@index([status])
+}
+
+model Post {
+  id            String   @id @default(cuid())
+  authorId      String
+  author        User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title         String
+  content       String
+  imageUrl      String?
+  tags          String[]
+  likesCount    Int      @default(0)
+  commentsCount Int      @default(0)
+  isPublished   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  comments Comment[]
+  likes    Like[]
+
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([postId])
+}
+
+model Like {
+  id     String @id @default(cuid())
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId])
+}
+
+model Demand {
+  id             String       @id @default(cuid())
+  clientId       String
+  client         User         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  specialty      String
+  uf             String
+  budget         Float?
+  status         DemandStatus @default(OPEN)
+  proposalsCount Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  proposals Proposal[]
+  contract  Contract?
+
+  @@index([clientId])
+  @@index([status, uf])
+  @@index([specialty])
+}
+
+model Proposal {
+  id            String         @id @default(cuid())
+  demandId      String
+  demand        Demand         @relation(fields: [demandId], references: [id], onDelete: Cascade)
+  lawyerProfileId String
+  lawyer        LawyerProfile  @relation(fields: [lawyerProfileId], references: [id], onDelete: Cascade)
+  description   String
+  price         Float
+  estimatedDays Int
+  status        ProposalStatus @default(PENDING)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  contract Contract?
+
+  @@unique([demandId, lawyerProfileId])
+  @@index([demandId])
+  @@index([lawyerProfileId])
+}
+
+model Contract {
+  id          String         @id @default(cuid())
+  demandId    String         @unique
+  demand      Demand         @relation(fields: [demandId], references: [id])
+  proposalId  String         @unique
+  proposal    Proposal       @relation(fields: [proposalId], references: [id])
+  clientId    String
+  client      User           @relation("ClientContracts", fields: [clientId], references: [id])
+  lawyerUserId String
+  lawyer      User           @relation("LawyerContracts", fields: [lawyerUserId], references: [id])
+  price       Float
+  status      ContractStatus @default(ACTIVE)
+  signedAt    DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  review Review?
+
+  @@index([clientId])
+  @@index([lawyerUserId])
+  @@index([status])
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  contractId String   @unique
+  contract   Contract @relation(fields: [contractId], references: [id])
+  reviewerId String
+  reviewer   User     @relation("ReviewerReviews", fields: [reviewerId], references: [id])
+  lawyerUserId String
+  rating     Int      // 1–5
+  comment    String
+  isVerified Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([lawyerUserId])
+}
+
+model CorrespondentRequest {
+  id             String              @id @default(cuid())
+  requesterId    String
+  requester      LawyerProfile       @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  title          String
+  description    String
+  uf             String
+  city           String
+  specialty      String
+  hearing        DateTime?
+  deadline       DateTime
+  budget         Float
+  status         CorrespondentStatus @default(OPEN)
+  proposalsCount Int                 @default(0)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  proposals CorrespondentProposal[]
+
+  @@index([uf, status])
+}
+
+model CorrespondentProposal {
+  id          String               @id @default(cuid())
+  requestId   String
+  request     CorrespondentRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  lawyerId    String
+  lawyer      LawyerProfile        @relation(fields: [lawyerId], references: [id], onDelete: Cascade)
+  description String
+  price       Float
+  status      ProposalStatus       @default(PENDING)
+  documentUrl String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  @@unique([requestId, lawyerId])
+  @@index([requestId])
+}
+
+model Report {
+  id          String       @id @default(cuid())
+  reporterId  String
+  reporter    User         @relation("ReporterReports", fields: [reporterId], references: [id])
+  reportedId  String
+  reported    User         @relation("ReportedReports", fields: [reportedId], references: [id])
+  type        ReportType
+  description String
+  status      ReportStatus @default(PENDING)
+  resolution  String?
+  resolvedBy  String?
+  createdAt   DateTime     @default(now())
+  resolvedAt  DateTime?
+
+  @@index([status])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  adminId   String
+  admin     User     @relation(fields: [adminId], references: [id])
+  action    String
+  target    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([adminId])
+  @@index([createdAt])
+}
