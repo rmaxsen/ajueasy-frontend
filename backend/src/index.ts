@@ -16,6 +16,7 @@ import reviewsRoutes from './routes/reviews.routes'
 import correspondentsRoutes from './routes/correspondents.routes'
 import adminRoutes from './routes/admin.routes'
 import paymentsRoutes from './routes/payments.routes'
+import processosRoutes from './routes/processos.routes'
 import { isSandboxMode } from './lib/iugu'
 
 // ─── App ──────────────────────────────────────────────────────────────────────
@@ -121,6 +122,7 @@ app.use('/contracts', reviewsRoutes)
 app.use('/correspondents', correspondentsRoutes)
 app.use('/admin', adminRoutes)
 app.use('/payments', paymentsRoutes)
+app.use('/processos', processosRoutes)
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 

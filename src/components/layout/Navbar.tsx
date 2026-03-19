@@ -11,6 +11,7 @@ const navLinks = [
   { label: 'Buscar Advogados', to: '/buscar' },
   { label: 'Demandas', to: '/marketplace' },
   { label: 'Correspondentes', to: '/correspondentes' },
+  { label: 'Andamento Processual', to: '/processos' },
   { label: 'Feed', to: '/feed' },
 ]
 

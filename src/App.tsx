@@ -27,6 +27,7 @@ const FAQPage = lazy(() => import('@/pages/Institutional/FAQPage'))
 const TermsPage = lazy(() => import('@/pages/Institutional/TermsPage'))
 const PrivacyPage = lazy(() => import('@/pages/Institutional/PrivacyPage'))
 const TrustPage = lazy(() => import('@/pages/Institutional/TrustPage'))
+const ProcessosPage = lazy(() => import('@/pages/Processos'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -90,6 +91,10 @@ export default function App() {
           <Route
             path="/admin"
             element={<PrivateRoute><AdminPage /></PrivateRoute>}
+          />
+          <Route
+            path="/processos"
+            element={<PrivateRoute><ProcessosPage /></PrivateRoute>}
           />
         </Route>
 

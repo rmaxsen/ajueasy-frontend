@@ -282,6 +282,20 @@ CREATE TABLE "PasswordReset" (
 );
 
 -- CreateTable
+CREATE TABLE "ProcessoMonitorado" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "numeroProcesso" TEXT NOT NULL,
+    "tribunalIndex" TEXT NOT NULL,
+    "alias" TEXT,
+    "lastCheckedAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "ProcessoMonitorado_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "AuditLog" (
     "id" TEXT NOT NULL,
     "adminId" TEXT NOT NULL,
@@ -342,6 +356,9 @@ CREATE INDEX "CorrespondentProposal_requestId_idx" ON "CorrespondentProposal"("r
 
 CREATE INDEX "Report_status_idx" ON "Report"("status");
 
+CREATE UNIQUE INDEX "ProcessoMonitorado_userId_numeroProcesso_key" ON "ProcessoMonitorado"("userId", "numeroProcesso");
+CREATE INDEX "ProcessoMonitorado_userId_idx" ON "ProcessoMonitorado"("userId");
+
 CREATE UNIQUE INDEX "RefreshToken_token_key" ON "RefreshToken"("token");
 CREATE INDEX "RefreshToken_userId_idx" ON "RefreshToken"("userId");
 
@@ -376,3 +393,4 @@ ALTER TABLE "Report" ADD CONSTRAINT "Report_reportedId_fkey" FOREIGN KEY ("repor
 ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "PasswordReset" ADD CONSTRAINT "PasswordReset_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "AuditLog" ADD CONSTRAINT "AuditLog_adminId_fkey" FOREIGN KEY ("adminId") REFERENCES "User"("id") ON UPDATE CASCADE;
+ALTER TABLE "ProcessoMonitorado" ADD CONSTRAINT "ProcessoMonitorado_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

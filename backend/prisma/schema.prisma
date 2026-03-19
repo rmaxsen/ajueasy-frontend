@@ -124,6 +124,7 @@ model User {
   auditLogs       AuditLog[]
   reportsMade     Report[]          @relation("ReporterReports")
   reportsReceived Report[]          @relation("ReportedReports")
+  processos       ProcessoMonitorado[]
 
   @@index([email])
   @@index([role])
@@ -396,6 +397,21 @@ model PasswordReset {
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model ProcessoMonitorado {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  numeroProcesso String    // CNJ format: NNNNNNN-DD.AAAA.J.TT.OOOO
+  tribunalIndex  String    // DataJud index, e.g. "tjsp", "tjrj"
+  alias          String?   // Friendly name set by user
+  lastCheckedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, numeroProcesso])
+  @@index([userId])
 }
 
 model AuditLog {
